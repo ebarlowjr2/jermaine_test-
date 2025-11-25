@@ -1,10 +1,8 @@
 from datetime import datetime
 import uuid
+import hashlib
 from typing import Dict, List, Optional
-from passlib.context import CryptContext
 from app.models import User, Course, Lesson, Enrollment, Payment, UserRole
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 users_db: Dict[str, User] = {}
 courses_db: Dict[str, Course] = {}
@@ -16,10 +14,11 @@ def generate_id() -> str:
     return str(uuid.uuid4())
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    # Simple SHA256 hash for proof of concept (use bcrypt/argon2 in production)
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return hash_password(plain_password) == hashed_password
 
 def get_user_by_email(email: str) -> Optional[User]:
     for user in users_db.values():
@@ -67,10 +66,12 @@ def create_course(course_data: dict) -> Course:
     
     for i, lesson_data in enumerate(lessons_data):
         lesson_id = generate_id()
+        # Remove order from lesson_data if present, we'll set it explicitly
+        lesson_order = lesson_data.pop('order', i + 1)
         lesson = Lesson(
             id=lesson_id,
             course_id=course_id,
-            order=i + 1,
+            order=lesson_order,
             **lesson_data
         )
         lessons_db[lesson_id] = lesson
