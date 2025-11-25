@@ -1,43 +1,10 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-interface ApiOptions {
-  method?: string;
-  body?: unknown;
-  headers?: Record<string, string>;
-}
-
-async function apiRequest<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
-  const token = localStorage.getItem('token');
-  
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    method: options.method || 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'An error occurred' }));
-    throw new Error(error.detail || 'An error occurred');
-  }
-  
-  return response.json();
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export interface User {
   id: string;
   email: string;
   name: string;
   role: 'student' | 'admin';
-  created_at: string;
   avatar_url?: string;
 }
 
@@ -45,24 +12,6 @@ export interface LoginResponse {
   access_token: string;
   token_type: string;
   user: User;
-}
-
-export interface Course {
-  id: string;
-  title: string;
-  description: string;
-  short_description: string;
-  price: number;
-  thumbnail_url: string;
-  category: string;
-  level: string;
-  instructor_name: string;
-  instructor_bio: string;
-  instructor_avatar?: string;
-  is_published: boolean;
-  created_at: string;
-  lessons: Lesson[];
-  enrolled_count: number;
 }
 
 export interface CourseListItem {
@@ -80,42 +29,80 @@ export interface CourseListItem {
 
 export interface Lesson {
   id: string;
-  course_id: string;
   title: string;
   description: string;
-  video_url?: string;
+  video_url: string;
   duration_minutes: number;
   order: number;
   downloadable_materials: string[];
 }
 
+export interface Course extends CourseListItem {
+  description: string;
+  instructor_bio: string;
+  instructor_avatar: string;
+  lessons: Lesson[];
+  is_published: boolean;
+}
+
 export interface Enrollment {
   id: string;
-  course: CourseListItem;
+  user_id: string;
+  course_id: string;
   enrolled_at: string;
   progress: number;
   completed_lessons: string[];
+  course: CourseListItem;
 }
 
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
+async function apiRequest<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  if (token) {
+    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+    throw new Error(error.detail || 'Request failed');
+  }
+
+  return response.json();
 }
 
 export const authApi = {
-  register: (data: { email: string; name: string; password: string }) =>
-    apiRequest<LoginResponse>('/api/auth/register', { method: 'POST', body: data }),
-  
   login: (data: { email: string; password: string }) =>
-    apiRequest<LoginResponse>('/api/auth/login', { method: 'POST', body: data }),
-  
-  forgotPassword: (email: string) =>
-    apiRequest<{ message: string }>('/api/auth/forgot-password', { method: 'POST', body: { email } }),
-  
-  resetPassword: (token: string, new_password: string) =>
-    apiRequest<{ message: string }>('/api/auth/reset-password', { method: 'POST', body: { token, new_password } }),
-  
+    apiRequest<LoginResponse>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  register: (data: { email: string; name: string; password: string }) =>
+    apiRequest<LoginResponse>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   getMe: () => apiRequest<User>('/api/auth/me'),
+
+  forgotPassword: (email: string) =>
+    apiRequest<{ message: string }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
 };
 
 export const coursesApi = {
@@ -127,74 +114,74 @@ export const coursesApi = {
     const query = searchParams.toString();
     return apiRequest<CourseListItem[]>(`/api/courses${query ? `?${query}` : ''}`);
   },
-  
-  featured: () => apiRequest<CourseListItem[]>('/api/courses/featured'),
-  
-  get: (id: string) => apiRequest<Course>(`/api/courses/${id}`),
-  
-  getCategories: () => apiRequest<{ categories: string[] }>('/api/categories'),
-  
-  getLevels: () => apiRequest<{ levels: string[] }>('/api/levels'),
-};
 
-export const adminApi = {
-  listCourses: () => apiRequest<Course[]>('/api/admin/courses'),
-  
-  createCourse: (data: Partial<Course>) =>
-    apiRequest<Course>('/api/admin/courses', { method: 'POST', body: data }),
-  
-  updateCourse: (id: string, data: Partial<Course>) =>
-    apiRequest<Course>(`/api/admin/courses/${id}`, { method: 'PUT', body: data }),
-  
-  deleteCourse: (id: string) =>
-    apiRequest<{ message: string }>(`/api/admin/courses/${id}`, { method: 'DELETE' }),
-  
-  addLesson: (courseId: string, data: Partial<Lesson>) =>
-    apiRequest<Lesson>(`/api/admin/courses/${courseId}/lessons`, { method: 'POST', body: data }),
-  
-  updateLesson: (lessonId: string, data: Partial<Lesson>) =>
-    apiRequest<Lesson>(`/api/admin/lessons/${lessonId}`, { method: 'PUT', body: data }),
-  
-  deleteLesson: (lessonId: string) =>
-    apiRequest<{ message: string }>(`/api/admin/lessons/${lessonId}`, { method: 'DELETE' }),
+  get: (id: string) => apiRequest<Course>(`/api/courses/${id}`),
+
+  getFeatured: () => apiRequest<CourseListItem[]>('/api/courses?featured=true'),
 };
 
 export const enrollmentApi = {
   list: () => apiRequest<Enrollment[]>('/api/enrollments'),
-  
-  check: (courseId: string) =>
-    apiRequest<{ enrolled: boolean; enrollment?: Enrollment }>(`/api/enrollments/${courseId}`),
-  
-  enrollFree: (courseId: string) =>
-    apiRequest<{ message: string; enrollment_id: string }>(`/api/enrollments/${courseId}/enroll`, { method: 'POST' }),
-  
-  updateProgress: (courseId: string, lessonId: string) =>
-    apiRequest<{ message: string; progress: number }>('/api/enrollments/progress', {
+
+  enroll: (courseId: string) =>
+    apiRequest<Enrollment>(`/api/enrollments/${courseId}`, {
       method: 'POST',
-      body: { course_id: courseId, lesson_id: lessonId },
+    }),
+
+  updateProgress: (courseId: string, lessonId: string) =>
+    apiRequest<Enrollment>(`/api/enrollments/${courseId}/progress`, {
+      method: 'POST',
+      body: JSON.stringify({ lesson_id: lessonId }),
     }),
 };
 
 export const paymentApi = {
-  createCheckoutSession: (courseId: string) =>
-    apiRequest<{ checkout_url: string; session_id: string }>('/api/payments/create-checkout-session', {
+  createCheckout: (courseId: string) =>
+    apiRequest<{ checkout_url: string }>('/api/payments/create-checkout', {
       method: 'POST',
-      body: { course_id: courseId },
+      body: JSON.stringify({ course_id: courseId }),
     }),
-  
+
   verifyPayment: (sessionId: string) =>
-    apiRequest<{ status: string; enrolled: boolean }>(`/api/payments/verify/${sessionId}`),
+    apiRequest<{ enrolled: boolean }>('/api/payments/verify', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+};
+
+export const adminApi = {
+  listCourses: () => apiRequest<Course[]>('/api/admin/courses'),
+
+  createCourse: (data: Partial<Course>) =>
+    apiRequest<Course>('/api/admin/courses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateCourse: (id: string, data: Partial<Course>) =>
+    apiRequest<Course>(`/api/admin/courses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteCourse: (id: string) =>
+    apiRequest<{ success: boolean }>(`/api/admin/courses/${id}`, {
+      method: 'DELETE',
+    }),
 };
 
 export const chatApi = {
-  send: (message: string, courseId?: string, history: ChatMessage[] = []) =>
+  sendMessage: (message: string, courseId?: string) =>
     apiRequest<{ response: string }>('/api/chat', {
       method: 'POST',
-      body: { message, course_id: courseId, history },
+      body: JSON.stringify({ message, course_id: courseId }),
     }),
 };
 
 export const contactApi = {
   submit: (data: { name: string; email: string; subject: string; message: string }) =>
-    apiRequest<{ message: string }>('/api/contact', { method: 'POST', body: data }),
+    apiRequest<{ success: boolean }>('/api/contact', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };

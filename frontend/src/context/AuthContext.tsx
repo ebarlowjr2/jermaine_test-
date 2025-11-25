@@ -1,5 +1,7 @@
+'use client';
+
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, authApi } from '../services/api';
+import { User, authApi } from '@/services/api';
 
 interface AuthContextType {
   user: User | null;
@@ -13,25 +15,44 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function getInitialToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('token');
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(getInitialToken);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const loadUser = async () => {
-      if (token) {
+      const currentToken = token;
+      if (currentToken) {
         try {
           const userData = await authApi.getMe();
-          setUser(userData);
+          if (isMounted) {
+            setUser(userData);
+          }
         } catch {
-          localStorage.removeItem('token');
-          setToken(null);
+          if (isMounted) {
+            localStorage.removeItem('token');
+            setToken(null);
+          }
         }
       }
-      setIsLoading(false);
+      if (isMounted) {
+        setIsLoading(false);
+      }
     };
+    
     loadUser();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [token]);
 
   const login = async (email: string, password: string) => {
