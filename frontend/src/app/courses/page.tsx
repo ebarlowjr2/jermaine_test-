@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CourseCard } from '@/components/CourseCard';
 import { coursesApi, CourseListItem } from '@/services/api';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, Filter } from 'lucide-react';
 
-export default function Courses() {
+function CoursesContent() {
   const searchParams = useSearchParams();
   const [courses, setCourses] = useState<CourseListItem[]>([]);
   const [filteredCourses, setFilteredCourses] = useState<CourseListItem[]>([]);
@@ -140,5 +140,17 @@ export default function Courses() {
         </div>
       </section>
     </>
+  );
+}
+
+export default function CoursesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1877F2] mx-auto"></div>
+      </div>
+    }>
+      <CoursesContent />
+    </Suspense>
   );
 }
